@@ -57,70 +57,14 @@ Then:
     sudo systemctl restart docker
 
 
-## Pre-Install Fixes
+### Installing
 
-### Step 1 — Load br_netfilter:
+    ./nemoclaw-install.sh
 
-    sudo modprobe br_netfilter
-    sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
+### Un-Installing
 
-    # Make persistent across reboots:
-    echo br_netfilter | sudo tee /etc/modules-load.d/k8s.conf
-    echo 'net.bridge.bridge-nf-call-iptables = 1' | sudo tee /etc/sysctl.d/k8s.conf
-
-### Step 2 — Patch the cluster image to use iptables-legacy:
-
-    IMAGE_NAME="ghcr.io/nvidia/openshell/cluster:0.0.13"
-
-    docker run --entrypoint sh --name fix-iptables "$IMAGE_NAME" -c '
-    update-alternatives --set iptables /usr/sbin/iptables-legacy
-    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-    ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables
-    ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables
-    iptables --version
-    '
-
-    docker commit \
-    --change 'ENTRYPOINT ["/usr/local/bin/cluster-entrypoint.sh"]' \
-    fix-iptables "$IMAGE_NAME"
-
-    docker rm fix-iptables
-
-### Step 3 — Configure Ollama to listen on all interfaces
-
-    sudo mkdir -p /etc/systemd/system/ollama.service.d
-    echo -e '[Service]\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"' \
-    | sudo tee /etc/systemd/system/ollama.service.d/override.conf
-    sudo systemctl daemon-reload && sudo systemctl restart ollama
-
-    # Verify:
-    ss -tlnp | grep 11434  # Should show 0.0.0.0:11434
-
-### Step 4 - Update Ollama
-
-    curl -fsSL https://ollama.com/install.sh | sh
-
-## Install NemoClaw
-
-    curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
-
-During onboarding you'll be prompted for a sandbox name (accept the default my-assistant), an inference option (choose 2 for local Ollama), and an Ollama model. The Docker image build at step [3/7] takes about 10 minutes on Orin on first run due to no cache.
-
-### Verify
-
-After install, the dashboard should be at http://127.0.0.1:18789/ and the OpenShell gateway at https://127.0.0.1:8080.
-
-### Connect to your sandbox:
-
-    nemoclaw my-assistant connect
-
-### Check sandbox health:
-
-    docker exec openshell-cluster-nemoclaw kubectl get pods -n openshell
-
-### Memory Note
-
-The sandbox image is approximately 2.4 GB compressed. On machines with less than 8 GB of RAM, the Docker daemon, k3s, and the OpenShell gateway running together can trigger the OOM killer. If you can't add memory, configuring at least 8 GB of swap can work around this at the cost of slower performance.
+    ./nemoclaw-undo.sh
+    
 
 ### Choosing a model (for 64GB Orin)
 
@@ -131,8 +75,4 @@ Best starting point for NemoClaw:
 This is the sweet spot for the 64 GB Orin — it's NVIDIA's own open model, purpose-built for agentic tasks, and fits comfortably in your memory. You'll get around 33–34 tokens/sec which is solid for an always-on assistant.
 If gpt-oss:20b feels slow or you want something snappier, drop down to qwen3:14b or llama3.1:8b. And if you just want to smoke-test the NemoClaw setup first before pulling a 13 GB model, grab qwen3.5:2b — it's tiny and fast.
 
-## Optional
 
-### Install Claude Code
-
-### Install Obsidian
