@@ -121,3 +121,12 @@ Install jtop to monitor GPU:
 In nemoclaw ask a question:
 
     what are the specs of this machine
+
+Gracefull shutdown
+
+    nemoclaw my-assistant destroy
+    openshell gateway destroy --name nemoclaw
+
+That cleanly removes the sandbox and stops the gateway. To bring it back up later just run:
+
+    ~/nemoclaw-restart.sh.
