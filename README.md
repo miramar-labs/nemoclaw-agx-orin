@@ -75,4 +75,33 @@ Best starting point for NemoClaw:
 This is the sweet spot for the 64 GB Orin — it's NVIDIA's own open model, purpose-built for agentic tasks, and fits comfortably in your memory. You'll get around 33–34 tokens/sec which is solid for an always-on assistant.
 If gpt-oss:20b feels slow or you want something snappier, drop down to qwen3:14b or llama3.1:8b. And if you just want to smoke-test the NemoClaw setup first before pulling a 13 GB model, grab qwen3.5:2b — it's tiny and fast.
 
+Several Nemotron models run on the AGX Orin 64GB. Here's what fits and what doesn't:
 
+✅ Will run well:
+| Model | Pull Command | Size | Notes |
+|---|---|---|---|
+| **nemotron-3-nano:4b** | `ollama pull nemotron-3-nano:4b` | 2.8 GB | Fastest Nemotron, good for quick agentic tasks |
+| **nemotron-3-nano:30b** | `ollama pull nemotron-3-nano:30b` | 24 GB | ⭐ Best Nemotron for Orin — MoE, only activates ~3B params per token, 1M context |
+| **nemotron-3-nano:30b-a3b-q8_0** | `ollama pull nemotron-3-nano:30b-a3b-q8_0` | 34 GB | Higher quality quant of the 30B |
+| **nemotron-mini:4b** | `ollama pull nemotron-mini:4b-instruct-q4_K_M` | ~3 GB | Older Nemotron, decent tool use |
+| **gpt-oss:20b** | `ollama pull gpt-oss:20b` | 13 GB | ⭐ NVIDIA's recommended model for Orin, ~34 tok/s |
+| **llama3.1:8b** | `ollama pull llama3.1:8b` | 4.9 GB | Fast general assistant |
+| **llama3.1:70b-q4_K_M** | `ollama pull llama3.1:70b-q4_K_M` | ~40 GB | Largest Llama that fits comfortably |
+| **qwen3:14b** | `ollama pull qwen3:14b` | 9 GB | Strong reasoning and tool use |
+| **qwen3:30b-a3b** | `ollama pull qwen3:30b-a3b` | 19 GB | MoE, efficient, great for agents |
+| **gemma3:12b** | `ollama pull gemma3:12b` | 8 GB | Good general assistant, fast |
+| **gemma3:27b** | `ollama pull gemma3:27b` | 17 GB | Best Gemma quality on Orin |
+| **mistral:7b** | `ollama pull mistral:7b` | 4.1 GB | Reliable, fast, good instruction following |
+| **phi4:14b** | `ollama pull phi4:14b` | 9 GB | Microsoft, strong reasoning for its size |
+| **deepseek-r1:14b** | `ollama pull deepseek-r1:14b` | 9 GB | Good reasoning/thinking model |
+| **deepseek-r1:32b** | `ollama pull deepseek-r1:32b` | 20 GB | Better reasoning, still fits well |
+| **nemotron-3-nano:30b-a3b-fp16** | `ollama pull nemotron-3-nano:30b-a3b-fp16` | 63 GB | ⚠️ Technically fits but leaves almost no headroom |
+| **nemotron-3-super** | `ollama pull nemotron-3-super` | ~87 GB | ❌ Too large — needs AGX Thor (128GB) |
+
+Best pick for NemoClaw on your Orin:
+
+    ollama pull nemotron-3-nano:30b
+
+Example of live-switching inference model:
+
+    openshell inference set --provider ollama-local --model nemotron-3-nano:30b
