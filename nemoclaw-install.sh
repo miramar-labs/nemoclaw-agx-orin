@@ -2,8 +2,13 @@
 set -e
 echo "=== NemoClaw Orin Install ==="
 
-# ── 0. Ensure Docker is running ───────────────────────────────────
-echo "[0/7] Ensuring Docker is running..."
+# ── 0. Host iptables-legacy (required for Docker on Orin) ─────────
+echo "[0/8] Setting host iptables to legacy..."
+sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+
+# ── 1. Docker ─────────────────────────────────────────────────────
+echo "[1/8] Ensuring Docker is running..."
 sudo systemctl enable docker
 sudo systemctl start docker
 for i in $(seq 1 30); do
@@ -12,10 +17,9 @@ for i in $(seq 1 30); do
     sleep 2
 done
 docker info &>/dev/null || { echo "ERROR: Docker failed to start"; exit 1; }
-echo "Docker is ready"
 
-# ── 1. Kernel modules ─────────────────────────────────────────────
-echo "[1/7] Kernel modules..."
+# ── 2. Kernel modules ─────────────────────────────────────────────
+echo "[2/8] Kernel modules..."
 sudo modprobe br_netfilter ip_tables iptable_filter iptable_nat
 cat << 'EOF' | sudo tee /etc/modules-load.d/k8s-iptables.conf
 br_netfilter
@@ -29,13 +33,8 @@ net.bridge.bridge-nf-call-ip6tables = 1
 EOF
 sudo sysctl --system
 
-# ── 2. Host iptables-legacy ────────────────────────────────────────
-echo "[2/7] Host iptables to legacy..."
-sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
-sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-
 # ── 3. Pin openshell to 0.0.13 ────────────────────────────────────
-echo "[3/7] Installing openshell 0.0.13..."
+echo "[3/8] Installing openshell 0.0.13..."
 ARCH=$(uname -m)
 wget -q "https://github.com/NVIDIA/OpenShell/releases/download/v0.0.13/openshell-${ARCH}-unknown-linux-musl.tar.gz" \
     -O /tmp/openshell.tar.gz
@@ -43,42 +42,30 @@ tar xzf /tmp/openshell.tar.gz -C /tmp
 install -m 755 /tmp/openshell ~/.local/bin/openshell
 echo "openshell: $(openshell --version)"
 
-# ── 4. Pull cluster image and bake in legacy iptables entrypoint ──
-echo "[4/7] Building patched cluster image..."
+# ── 4. Pull, patch and pin cluster image ──────────────────────────
+echo "[4/8] Building patched cluster image..."
 docker pull ghcr.io/nvidia/openshell/cluster:0.0.13
-
 mkdir -p /tmp/openshell-patch
 cat << 'EOF' > /tmp/openshell-patch/Dockerfile
 FROM ghcr.io/nvidia/openshell/cluster:0.0.13
-
-RUN update-alternatives --set iptables /usr/sbin/iptables-legacy \
- && update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy \
- && (update-alternatives --set iptables-restore /usr/sbin/iptables-legacy-restore 2>/dev/null || true) \
- && (update-alternatives --set ip6tables-restore /usr/sbin/ip6tables-legacy-restore 2>/dev/null || true) \
+RUN update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true \
+ && update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true \
+ && update-alternatives --set iptables-restore /usr/sbin/iptables-legacy-restore 2>/dev/null || true \
+ && update-alternatives --set ip6tables-restore /usr/sbin/ip6tables-legacy-restore 2>/dev/null || true \
  && ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables \
  && ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables \
- && (ln -sf /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore 2>/dev/null || true) \
- && (ln -sf /usr/sbin/ip6tables-legacy-restore /usr/sbin/ip6tables-restore 2>/dev/null || true)
-
-RUN printf '#!/bin/sh\n\
-update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true\n\
-update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true\n\
-ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables\n\
-ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables\n\
-ln -sf /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore 2>/dev/null || true\n\
-ln -sf /usr/sbin/ip6tables-legacy-restore /usr/sbin/ip6tables-restore 2>/dev/null || true\n\
-exec /usr/local/bin/cluster-entrypoint.sh "$@"\n' \
-    > /usr/local/bin/jetson-entrypoint.sh \
- && chmod +x /usr/local/bin/jetson-entrypoint.sh
-
+ && ln -sf /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore 2>/dev/null || true \
+ && ln -sf /usr/sbin/ip6tables-legacy-restore /usr/sbin/ip6tables-restore 2>/dev/null || true
+RUN printf '#!/bin/sh\nln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables\nln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables\nln -sf /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore 2>/dev/null || true\nln -sf /usr/sbin/ip6tables-legacy-restore /usr/sbin/ip6tables-restore 2>/dev/null || true\nexec /usr/local/bin/cluster-entrypoint.sh "$@"\n' \
+    > /usr/local/bin/jetson-entrypoint.sh && chmod +x /usr/local/bin/jetson-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/jetson-entrypoint.sh"]
 EOF
-
-docker build -t ghcr.io/nvidia/openshell/cluster:0.0.13 /tmp/openshell-patch/
-echo "Cluster image iptables: $(docker run --rm --entrypoint sh ghcr.io/nvidia/openshell/cluster:0.0.13 -c 'iptables --version')"
+docker build --no-cache -t ghcr.io/nvidia/openshell/cluster:0.0.13 /tmp/openshell-patch/
+docker rmi $(docker images --format '{{.Repository}}@{{.Digest}}' | grep 'openshell/cluster') 2>/dev/null || true
+echo "✓ Cluster image patched and pinned"
 
 # ── 5. Ollama on 0.0.0.0 ──────────────────────────────────────────
-echo "[5/7] Configuring Ollama..."
+echo "[5/8] Configuring Ollama..."
 sudo mkdir -p /etc/systemd/system/ollama.service.d
 cat << 'EOF' | sudo tee /etc/systemd/system/ollama.service.d/override.conf
 [Service]
@@ -87,8 +74,8 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl restart ollama 2>/dev/null || true
 
-# ── 6. Boot service to auto-start gateway ─────────────────────────
-echo "[6/7] Installing boot service..."
+# ── 6. Boot service ───────────────────────────────────────────────
+echo "[6/8] Installing boot service..."
 OPENSHELL_BIN=$(which openshell)
 sudo tee /etc/systemd/system/openshell-gateway.service << EOF
 [Unit]
@@ -106,13 +93,37 @@ sudo systemctl daemon-reload
 sudo systemctl enable openshell-gateway.service
 
 # ── 7. Install NemoClaw ───────────────────────────────────────────
-echo "[7/7] Installing NemoClaw..."
+echo "[7/8] Installing NemoClaw..."
 echo ""
 echo ">>> IMPORTANT: press ENTER for default sandbox name 'my-assistant'"
 echo ">>> Choose local Ollama for inference"
 echo ""
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 
+# ── 8. Post-onboard patch ─────────────────────────────────────────
+echo "[8/8] Post-onboard image patch..."
+for IMAGE in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'openshell|sandbox-from|sandbox-base'); do
+    echo "Patching $IMAGE..."
+    mkdir -p /tmp/openshell-patch
+    cat > /tmp/openshell-patch/Dockerfile << DFEOF
+FROM $IMAGE
+RUN update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true \
+ && update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true \
+ && update-alternatives --set iptables-restore /usr/sbin/iptables-legacy-restore 2>/dev/null || true \
+ && ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables \
+ && ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables \
+ && ln -sf /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore 2>/dev/null || true
+RUN printf '#!/bin/sh\nln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables\nln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables\nexec /usr/local/bin/cluster-entrypoint.sh "\$@"\n' \
+    > /usr/local/bin/jetson-entrypoint.sh && chmod +x /usr/local/bin/jetson-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/jetson-entrypoint.sh"]
+DFEOF
+    docker build --no-cache -t "$IMAGE" /tmp/openshell-patch/ && echo "✓ Patched $IMAGE" || echo "✗ Failed $IMAGE"
+done
+
+echo "=== Restarting gateway with patched images ==="
+openshell gateway destroy --name nemoclaw 2>/dev/null || true
+openshell gateway start --name nemoclaw
+
 echo ""
 echo "=== Install complete ==="
-echo "Open a new terminal, then run: nemoclaw my-assistant connect"
+echo "Run: nemoclaw my-assistant connect"

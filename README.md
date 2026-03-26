@@ -102,8 +102,22 @@ Several Nemotron models run on the AGX Orin 64GB. Here's what fits and what does
 
 Best pick for NemoClaw on your Orin:
 
-    ollama pull nemotron-3-nano:30b
+    ollama pull gpt-oss:20b
 
-Example of live-switching inference model:
 
-    openshell inference set --provider ollama-local --model nemotron-3-nano:30b
+Example of switching inference model:
+
+    ./nemoclaw-restart.sh
+    nemoclaw onboard  (pick the model here & create sandbox)
+    openclaw tui
+    
+
+Install jtop to monitor GPU:
+
+    sudo pip3 install jetson-stats --break-system-packages
+    sudo systemctl restart jtop
+    jtop
+
+In nemoclaw ask a question:
+
+    what are the specs of this machine
