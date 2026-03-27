@@ -61,11 +61,11 @@ Then:
 
 ### Installing
 
-    ./nemoclaw-install.sh
+    ./install.sh
 
 ### Un-Installing
 
-    ./nemoclaw-undo.sh
+    ./uninstall.sh
     
 
 ### Choosing a model (for 64GB Orin)
@@ -107,9 +107,8 @@ Best pick for NemoClaw on your Orin:
 
 Example of switching inference model:
 
-    ./nemoclaw-restart.sh
-    nemoclaw onboard  (pick the model here & create sandbox)
-    openclaw tui
+    ./up.sh
+    openclaw tui  (from sandbox prompt)
     
 
 Install jtop to monitor GPU:
@@ -124,9 +123,8 @@ In nemoclaw ask a question:
 
 Gracefull shutdown
 
-    nemoclaw my-assistant destroy
-    openshell gateway destroy --name nemoclaw
+    ./down.sh
 
 That cleanly removes the sandbox and stops the gateway. To bring it back up later just run:
 
-    ~/nemoclaw-restart.sh.
+    ./up.sh
