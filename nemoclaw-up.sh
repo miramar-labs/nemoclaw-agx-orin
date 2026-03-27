@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "=== Restarting NemoClaw ==="
+echo "=== Starting NemoClaw ==="
 
 # Ensure Docker is running
 sudo systemctl start docker
@@ -42,9 +42,6 @@ done
 
 # Start gateway
 openshell gateway start --name nemoclaw
-
-# Stop stale forward if present
-openshell forward stop 18789 my-assistant 2>/dev/null || true
 
 # Stop stale forward if present
 openshell forward stop 18789 my-assistant 2>/dev/null || true

@@ -100,30 +100,6 @@ echo ">>> Choose local Ollama for inference"
 echo ""
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 
-# ── 8. Post-onboard patch ─────────────────────────────────────────
-echo "[8/8] Post-onboard image patch..."
-for IMAGE in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'openshell|sandbox-from|sandbox-base'); do
-    echo "Patching $IMAGE..."
-    mkdir -p /tmp/openshell-patch
-    cat > /tmp/openshell-patch/Dockerfile << DFEOF
-FROM $IMAGE
-RUN update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true \
- && update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true \
- && update-alternatives --set iptables-restore /usr/sbin/iptables-legacy-restore 2>/dev/null || true \
- && ln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables \
- && ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables \
- && ln -sf /usr/sbin/iptables-legacy-restore /usr/sbin/iptables-restore 2>/dev/null || true
-RUN printf '#!/bin/sh\nln -sf /usr/sbin/iptables-legacy /usr/sbin/iptables\nln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables\nexec /usr/local/bin/cluster-entrypoint.sh "\$@"\n' \
-    > /usr/local/bin/jetson-entrypoint.sh && chmod +x /usr/local/bin/jetson-entrypoint.sh
-ENTRYPOINT ["/usr/local/bin/jetson-entrypoint.sh"]
-DFEOF
-    docker build --no-cache -t "$IMAGE" /tmp/openshell-patch/ && echo "✓ Patched $IMAGE" || echo "✗ Failed $IMAGE"
-done
-
-echo "=== Restarting gateway with patched images ==="
-openshell gateway destroy --name nemoclaw 2>/dev/null || true
-openshell gateway start --name nemoclaw
-
 echo ""
 echo "=== Install complete ==="
-echo "Run: nemoclaw my-assistant connect"
+echo "Run: nemoclaw-up.sh"
