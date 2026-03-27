@@ -43,11 +43,29 @@ done
 # Start gateway
 openshell gateway start --name nemoclaw
 
-# Connect if sandbox exists, otherwise prompt onboard
-if nemoclaw my-assistant status &>/dev/null; then
+# Stop stale forward if present
+openshell forward stop 18789 my-assistant 2>/dev/null || true
+
+# Stop stale forward if present
+openshell forward stop 18789 my-assistant 2>/dev/null || true
+
+# If sandbox exists in the live gateway, connect. Otherwise onboard, then connect.
+if openshell sandbox get my-assistant >/dev/null 2>&1; then
     nemoclaw my-assistant connect
 else
     echo ""
-    echo "No sandbox found. Run: nemoclaw onboard"
-    echo "After onboard completes run: ~/nemoclaw-restart.sh"
+    echo "No live sandbox found for my-assistant."
+    echo "Starting onboard..."
+    nemoclaw onboard
+
+    # Clear stale forward again in case onboard partially set one up
+    openshell forward stop 18789 my-assistant 2>/dev/null || true
+
+    if openshell sandbox get my-assistant >/dev/null 2>&1; then
+        nemoclaw my-assistant connect
+    else
+        echo "Sandbox still not available after onboard."
+        echo "Check with: openshell sandbox list"
+        exit 1
+    fi
 fi
